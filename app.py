@@ -7,10 +7,7 @@ load_dotenv()
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 app = Flask(__name__)
 
-def call_groq_agent(user_prompt, sys_prompt="Technical utility. Raw data only."):
-    # Corrected Groq model identifiers
-    model_name = "llama-3.3-70b-versatile"
-
+def call_groq_agent(user_prompt, sys_prompt="Technical utility.", model_name="llama-3.3-70b-versatile"):
     completion = client.chat.completions.create(
         model=model_name,
         messages=[
@@ -35,25 +32,25 @@ def handlePrompt():
     try:
         if cmd == "!web":
             web_sys = (
-                "Technical utility. Summarize in exactly one plain-text sentence. "
+                "Technical utility. Perform a web search for the user query. "
+                "Summarize the findings in exactly one plain-text sentence. "
                 "No lists, no bullet points, no prose. "
                 "CRITICAL: Do not use any markdown formatting, asterisks, or bold text. "
                 "Output strictly raw text suitable for a legacy IRC client."
-                "make sure to send a reference to the answer"
             )
-            response = call_groq_agent(f"Search and summarize: {args}", sys_prompt=web_sys)
+            response = call_groq_agent(args, sys_prompt=web_sys, model_name="groq/compound-mini")
             
         elif cmd == "!sh":
             sh_sys = "Output strictly raw bash code. No markdown formatting, no backticks, no prose."
-            response = call_groq_agent(args, sys_prompt=sh_sys)
+            response = call_groq_agent(args, sys_prompt=sh_sys, model_name="llama-3.3-70b-versatile")
             
         elif cmd == "!exec":
             exec_sys = "Output strictly a single-line raw bash command. No markdown, no prose, no backticks."
-            raw_cmd = call_groq_agent(args, sys_prompt=exec_sys).strip()
+            raw_cmd = call_groq_agent(args, sys_prompt=exec_sys, model_name="llama-3.1-8b-instant").strip()
             
             eval_prompt = f"Analyze this bash command: '{raw_cmd}'. Is it safe to execute on a host system? It must not delete files, open reverse shells, or modify system configs. Reply strictly with the word 'SAFE' or 'UNSAFE'. No other text."
             eval_sys = "You are a strict cybersecurity evaluator. Output only SAFE or UNSAFE."
-            evaluation = call_groq_agent(eval_prompt, sys_prompt=eval_sys).strip().upper()
+            evaluation = call_groq_agent(eval_prompt, sys_prompt=eval_sys, model_name="llama-3.3-70b-versatile").strip().upper()
             
             if evaluation == "SAFE":
                 return f"EXEC_PAYLOAD:{raw_cmd}\n"
@@ -61,6 +58,7 @@ def handlePrompt():
                 return f"[SECURITY_BLOCK] Command flagged as unsafe: {raw_cmd}\n"
         else:
             return f"[ERROR] Unknown module: {cmd}\n"
+        
         return response.strip() + "\n"
         
     except Exception as e:
