@@ -14,7 +14,8 @@ def call_groq_agent(user_prompt, sys_prompt="Technical utility.", model_name="ll
             {"role": "system", "content": sys_prompt},
             {"role": "user", "content": user_prompt}
         ],
-        temperature=0.1
+        temperature=0.1,
+        max_tokens=150
     )
     return completion.choices[0].message.content
 
@@ -24,7 +25,7 @@ def handlePrompt():
     raw_input = data.get('prompt', '').strip()
     
     if not raw_input.startswith("!"):
-        return "[ERROR] Syntax: !web <query> or !sh <task> or !exec <task>\n"
+        return "[ERROR] Syntax: !web <query> or !sh <task>\n"
 
     parts = raw_input.split(' ', 1)
     cmd, args = parts[0].lower(), (parts[1] if len(parts) > 1 else "")
@@ -32,37 +33,24 @@ def handlePrompt():
     try:
         if cmd == "!web":
             web_sys = (
-                "Technical utility. Perform a web search for the user query. "
-                "Summarize the findings in exactly one plain-text sentence. "
-                "No lists, no bullet points, no prose. "
-                "CRITICAL: Do not use any markdown formatting, asterisks, or bold text. "
-                "Output strictly raw text suitable for a legacy IRC client."
+                "Technical utility. Perform a web search. "
+                "Output strictly one plain-text sentence. "
+                "No markdown, no asterisks, no bold. Raw text only."
             )
             response = call_groq_agent(args, sys_prompt=web_sys, model_name="groq/compound-mini")
             
         elif cmd == "!sh":
-            sh_sys = "Output strictly raw bash code. No markdown formatting, no backticks, no prose."
-            response = call_groq_agent(args, sys_prompt=sh_sys, model_name="llama-3.3-70b-versatile")
+            sh_sys = "Output strictly raw bash code. No markdown, no backticks, no prose."
+            response = call_groq_agent(f"Generate bash for: {args}", sys_prompt=sh_sys)
             
-        elif cmd == "!exec":
-            exec_sys = "Output strictly a single-line raw bash command. No markdown, no prose, no backticks."
-            raw_cmd = call_groq_agent(args, sys_prompt=exec_sys, model_name="llama-3.1-8b-instant").strip()
-            
-            eval_prompt = f"Analyze this bash command: '{raw_cmd}'. Is it safe to execute on a host system? It must not delete files, open reverse shells, or modify system configs. Reply strictly with the word 'SAFE' or 'UNSAFE'. No other text."
-            eval_sys = "You are a strict cybersecurity evaluator. Output only SAFE or UNSAFE."
-            evaluation = call_groq_agent(eval_prompt, sys_prompt=eval_sys, model_name="llama-3.3-70b-versatile").strip().upper()
-            
-            if evaluation == "SAFE":
-                return f"EXEC_PAYLOAD:{raw_cmd}\n"
-            else:
-                return f"[SECURITY_BLOCK] Command flagged as unsafe: {raw_cmd}\n"
         else:
             return f"[ERROR] Unknown module: {cmd}\n"
         
-        return response.strip() + "\n"
+        clean_response = response.replace('\n', ' ').replace('**', '').replace('`', '').strip()
+        return clean_response + "\n"
         
     except Exception as e:
         return f"[SYSTEM_FAILURE] {str(e)}\n"
 
 if __name__ == '__main__':
-    app.run(port=5000)
+    app.run(host='127.0.0.1', port=5000)
