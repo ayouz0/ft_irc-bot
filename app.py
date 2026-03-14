@@ -7,13 +7,13 @@ load_dotenv()
 client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
 app = Flask(__name__)
 
-def call_groq_agent(user_prompt, lite = True):
-    model_name =  "llama-3.3-70b-versatile" if lite == False else "llama-3-8b"
+def call_groq_agent(user_prompt, sys_prompt="Technical utility. Raw data only. Max 300 chars. No prose.", lite=True):
+    model_name = "llama-3.1-8b-instant" if lite else "llama-3.3-70b-versatile"
 
     completion = client.chat.completions.create(
         model=model_name,
         messages=[
-            {"role": "system", "content": "Technical utility. Raw data only. Max 300 chars. No prose."},
+            {"role": "system", "content": sys_prompt},
             {"role": "user", "content": user_prompt}
         ],
         temperature=0.1
@@ -26,7 +26,7 @@ def handlePrompt():
     raw_input = data.get('prompt', '').strip()
     
     if not raw_input.startswith("!"):
-        return "[ERROR] Syntax: !web <query> or !sh <task>"
+        return "[ERROR] Syntax: !web <query> or !sh <task> or !exec <task>"
 
     parts = raw_input.split(' ', 1)
     cmd, args = parts[0].lower(), (parts[1] if len(parts) > 1 else "")
@@ -35,24 +35,28 @@ def handlePrompt():
         if cmd == "!web":
             response = call_groq_agent(f"Search and summarize: {args}", lite=True)
         elif cmd == "!sh":
-            response = call_groq_agent(f"provide BASH ONLY for this user query: {args}")
-        elif cmd == "!exec":
-            # generate the command
-            generate_prompt = f"Output strictly the raw bash command for: {args}. No markdown, no prose, no backticks."
-            raw_cmd = call_groq_agent(generate_prompt)
-            clean_cmd = raw_cmd.replace('`', '').replace('\n', ' && ').strip()
+            sh_sys = "Output strictly raw bash code. No markdown formatting, no backticks, no prose."
+            response = call_groq_agent(args, sys_prompt=sh_sys, lite=False)
             
-            # evaluate the generated command
-            eval_prompt = f"Analyze this bash command: '{clean_cmd}'. Is it safe to execute on a host macos system? It must not delete files, open reverse shells, or modify system configs. Reply strictly with the word 'SAFE' or 'UNSAFE'. No other text."
-            evaluation = call_groq_agent(eval_prompt).strip().upper()
+        elif cmd == "!exec":
+            # generate command using the smaller model for speed
+            exec_sys = "Output strictly a single-line raw bash command. No markdown, no prose."
+            raw_cmd = call_groq_agent(args, sys_prompt=exec_sys, lite=True).strip()
+            
+            # evaluate using the larger model
+            eval_prompt = f"Analyze this bash command: '{raw_cmd}'. Is it safe to execute on a host macos system? It must not delete files, open reverse shells, or modify system configs. Reply strictly with the word 'SAFE' or 'UNSAFE'. No other text."
+            eval_sys = "You are a strict cybersecurity evaluator. Output only SAFE or UNSAFE."
+            evaluation = call_groq_agent(eval_prompt, sys_prompt=eval_sys, lite=False).strip().upper()
+            
             if evaluation == "SAFE":
-                return f"EXEC_PAYLOAD:{clean_cmd}"
+                return f"EXEC_PAYLOAD:{raw_cmd}"
             else:
-                return f"[SECURITY_BLOCK] Command flagged as unsafe. {clean_cmd}"
+                return f"[SECURITY_BLOCK] Command flagged as unsafe: {raw_cmd}"
         else:
             return f"[ERROR] Unknown module: {cmd}"
 
-        return response.replace('**', '').strip()[:400]
+        return response.strip()
+        
     except Exception as e:
         return f"[SYSTEM_FAILURE] {str(e)}"
 
