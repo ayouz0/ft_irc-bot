@@ -33,7 +33,7 @@ def handlePrompt():
 
     try:
         if cmd == "!web":
-            response = call_groq_agent(f"Search and summarize: {args}", lite=True)
+            response = call_groq_agent(f"Search and summarize: {args}", lite=False)
         elif cmd == "!sh":
             sh_sys = "Output strictly raw bash code. No markdown formatting, no backticks, no prose."
             response = call_groq_agent(args, sys_prompt=sh_sys, lite=False)
@@ -41,7 +41,7 @@ def handlePrompt():
         elif cmd == "!exec":
             # generate command using the smaller model for speed
             exec_sys = "Output strictly a single-line raw bash command. No markdown, no prose."
-            raw_cmd = call_groq_agent(args, sys_prompt=exec_sys, lite=True).strip()
+            raw_cmd = call_groq_agent(args, sys_prompt=exec_sys, lite=False).strip()
             
             # evaluate using the larger model
             eval_prompt = f"Analyze this bash command: '{raw_cmd}'. Is it safe to execute on a host macos system? It must not delete files, open reverse shells, or modify system configs. Reply strictly with the word 'SAFE' or 'UNSAFE'. No other text."
