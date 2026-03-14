@@ -39,6 +39,7 @@ def handlePrompt():
                 "No lists, no bullet points, no prose. "
                 "CRITICAL: Do not use any markdown formatting, asterisks, or bold text. "
                 "Output strictly raw text suitable for a legacy IRC client."
+                "make sure to send a reference to the answer"
             )
             response = call_groq_agent(f"Search and summarize: {args}", sys_prompt=web_sys)
             
